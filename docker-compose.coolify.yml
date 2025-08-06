@@ -51,8 +51,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
 
       # === Домен/URL (генерируются) ===
-      NEXTAUTH_URL: ${SERVICE_URL_PLUGGEDIN-APP:-${COOLIFY_URL}}
-      NEXT_PUBLIC_APP_URL: ${SERVICE_URL_PLUGGEDIN-APP:-${COOLIFY_URL}}
+      NEXTAUTH_URL: ${COOLIFY_URL}
+      NEXT_PUBLIC_APP_URL: ${COOLIFY_URL}
 
       # === Секреты (генерируются) ===
       NEXTAUTH_SECRET: ${SERVICE_BASE64_64_NEXTAUTH}
