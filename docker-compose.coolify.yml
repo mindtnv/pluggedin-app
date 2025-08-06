@@ -19,7 +19,7 @@ services:
     container_name: pluggedin-migrate
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.optimized
       target: migrator
     restart: "no"
     command: >
@@ -45,7 +45,7 @@ services:
     container_name: pluggedin-app
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.optimized
     restart: always
     environment:
       NODE_ENV: ${NODE_ENV:-production}
