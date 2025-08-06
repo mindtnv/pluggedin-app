@@ -4,14 +4,13 @@ services:
     image: postgres:16.2-alpine3.18
     restart: always
     environment:
-      # генерируем и сохраняем пароль БД
-      - POSTGRES_DB=pluggedin
-      - POSTGRES_USER=pluggedin
-      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_DB}
+      POSTGRES_DB: ${POSTGRES_DB:-pluggedin}
+      POSTGRES_USER: ${POSTGRES_USER:-pluggedin}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_DB}
     volumes:
       - pluggedin-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h pluggedin-postgres -p 5432 -U plugggedin -d pluggedin"]
+      test: ["CMD-SHELL", "pg_isready -h pluggedin-postgres -p 5432 -U ${POSTGRES_USER:-pluggedin} -d ${POSTGRES_DB:-pluggedin}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,12 +22,10 @@ services:
       dockerfile: Dockerfile
       target: migrator
     restart: "no"
-    # исключаем из общих healthchecks Coolify
-    exclude_from_hc: true
     command: >
       sh -c "
         echo 'Waiting for database to be ready...';
-        until pg_isready -h pluggedin-postgres -p 5432 -U plugggedin; do
+        until pg_isready -h pluggedin-postgres -p 5432 -U ${POSTGRES_USER:-pluggedin}; do
           echo 'Database is unavailable - sleeping';
           sleep 2;
         done;
@@ -36,11 +33,10 @@ services:
         pnpm drizzle-kit migrate
       "
     environment:
-      # используем тот же сгенерированный пароль
-      - PGUSER=plugggedin
-      - PGHOST=pluggedin-postgres
-      - PGDATABASE=pluggedin
-      - DATABASE_URL=postgresql://plugggedin:${SERVICE_PASSWORD_DB}@pluggedin-postgres:5432/pluggedin
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-pluggedin}:${SERVICE_PASSWORD_DB}@pluggedin-postgres:5432/${POSTGRES_DB:-pluggedin}}
+      PGUSER: ${POSTGRES_USER:-pluggedin}
+      PGHOST: pluggedin-postgres
+      PGDATABASE: ${POSTGRES_DB:-pluggedin}
     depends_on:
       pluggedin-postgres:
         condition: service_healthy
@@ -51,41 +47,84 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
-    # генерируем FQDN и проксирование на порт 3000
     environment:
-      - SERVICE_FQDN_APP_3000
-      # подставляем актуальный URL фронта из Coolify
-      - NEXTAUTH_URL=$SERVICE_URL_APP
-      - NEXT_PUBLIC_APP_URL=$SERVICE_URL_APP
+      NODE_ENV: ${NODE_ENV:-production}
 
-      - NODE_ENV=production
+      # === Домен/URL (генерируются) ===
+      NEXTAUTH_URL: ${SERVICE_URL_APP}          # готовый https://FQDN
+      NEXT_PUBLIC_APP_URL: ${SERVICE_URL_APP}
 
-      # генерируем секреты (длинные, base64/realbase64 можно менять)
-      - NEXTAUTH_SECRET=${SERVICE_BASE64_64_NEXTAUTH}
-      - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${SERVICE_REALBASE64_64_SERVERACTIONS}
+      # === Секреты (генерируются) ===
+      NEXTAUTH_SECRET: ${SERVICE_BASE64_64_NEXTAUTH}
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${SERVICE_REALBASE64_64_SERVERACTIONS}
 
-      # БД: используем сгенерированный пароль
-      - DATABASE_URL=postgresql://plugggedin:${SERVICE_PASSWORD_DB}@pluggedin-postgres:5432/pluggedin
+      # === БД (если DATABASE_URL не задан — соберётся с генерируемым паролем) ===
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-pluggedin}:${SERVICE_PASSWORD_DB}@pluggedin-postgres:5432/${POSTGRES_DB:-pluggedin}}
 
-      # фичи
-      - ENABLE_RAG=${ENABLE_RAG:-true}
-      - ENABLE_NOTIFICATIONS=${ENABLE_NOTIFICATIONS:-true}
-      - ENABLE_EMAIL_VERIFICATION=${ENABLE_EMAIL_VERIFICATION:-false}
+      # === Фичи ===
+      ENABLE_RAG: ${ENABLE_RAG:-true}
+      ENABLE_NOTIFICATIONS: ${ENABLE_NOTIFICATIONS:-true}
+      ENABLE_EMAIL_VERIFICATION: ${ENABLE_EMAIL_VERIFICATION:-false}
 
-      # почта / oauth / api-ключи — по необходимости (можно занести через UI)
-      - EMAIL_FROM=${EMAIL_FROM:-noreply@plugged.in}
-      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Pluggedin}
-      - EMAIL_SERVER_HOST
-      - EMAIL_SERVER_PORT=587
-      - EMAIL_SERVER_USER
-      - EMAIL_SERVER_PASSWORD
-      - GITHUB_ID
-      - GITHUB_SECRET
-      - GOOGLE_CLIENT_ID
-      - GOOGLE_CLIENT_SECRET
-      - ANTHROPIC_API_KEY
-      - OPENAI_API_KEY
-      - GOOGLE_API_KEY
+      # === Почта (редактируемые) ===
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@plugged.in}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Pluggedin}
+      EMAIL_SERVER_HOST: ${EMAIL_SERVER_HOST:-}
+      EMAIL_SERVER_PORT: ${EMAIL_SERVER_PORT:-587}
+      EMAIL_SERVER_USER: ${EMAIL_SERVER_USER:-}
+      EMAIL_SERVER_PASSWORD: ${EMAIL_SERVER_PASSWORD:-}
+
+      # === OAuth (редактируемые) ===
+      GITHUB_ID: ${GITHUB_ID:-}
+      GITHUB_SECRET: ${GITHUB_SECRET:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      TWITTER_CLIENT_ID: ${TWITTER_CLIENT_ID:-}
+      TWITTER_CLIENT_SECRET: ${TWITTER_CLIENT_SECRET:-}
+
+      # === API-ключи моделей (редактируемые) ===
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # BRAVE_API_KEY добавьте аналогично при необходимости
+
+      # === Админ/безопасность (редактируемые) ===
+      ADMIN_NOTIFICATION_EMAILS: ${ADMIN_NOTIFICATION_EMAILS:-}
+      ADMIN_MIGRATION_SECRET: ${ADMIN_MIGRATION_SECRET:-}
+      NEXT_PUBLIC_ADMIN_USERS: ${NEXT_PUBLIC_ADMIN_USERS:-}
+
+      # === Registry (опционально, редактируемые) ===
+      REGISTRY_API_URL: ${REGISTRY_API_URL:-}
+      REGISTRY_INTERNAL_API_KEY: ${REGISTRY_INTERNAL_API_KEY:-}
+      REGISTRY_AUTH_TOKEN: ${REGISTRY_AUTH_TOKEN:-}
+      NEXT_PUBLIC_PLUGGEDIN_REGISTRY_URL: ${NEXT_PUBLIC_PLUGGEDIN_REGISTRY_URL:-}
+
+      # === Прочее ===
+      RAG_API_URL: ${RAG_API_URL:-}
+      REDIS_URL: ${REDIS_URL:-}
+
+      # === Лимиты/изоляция MCP (редактируемые с дефолтами) ===
+      MCP_CPU_CORES_MAX: ${MCP_CPU_CORES_MAX:-0.5}
+      MCP_MEMORY_MAX_MB: ${MCP_MEMORY_MAX_MB:-512}
+      MCP_IO_READ_MBPS: ${MCP_IO_READ_MBPS:-10}
+      MCP_IO_WRITE_MBPS: ${MCP_IO_WRITE_MBPS:-5}
+      MCP_PROCESS_TIMEOUT_MS: ${MCP_PROCESS_TIMEOUT_MS:-300000}
+      MCP_STARTUP_TIMEOUT_MS: ${MCP_STARTUP_TIMEOUT_MS:-10000}
+      MCP_PACKAGE_STORE_DIR: ${MCP_PACKAGE_STORE_DIR:-/var/mcp-packages}
+      MCP_PNPM_STORE_DIR: ${MCP_PNPM_STORE_DIR:-/var/mcp-packages/pnpm-store}
+      MCP_UV_CACHE_DIR: ${MCP_UV_CACHE_DIR:-/var/mcp-packages/uv-cache}
+      MCP_PACKAGE_CACHE_DAYS: ${MCP_PACKAGE_CACHE_DAYS:-30}
+      MCP_PREWARM_COMMON_PACKAGES: ${MCP_PREWARM_COMMON_PACKAGES:-true}
+      MCP_ISOLATION_TYPE: ${MCP_ISOLATION_TYPE:-bubblewrap}
+      MCP_ISOLATION_FALLBACK: ${MCP_ISOLATION_FALLBACK:-firejail}
+      MCP_ENABLE_NETWORK_ISOLATION: ${MCP_ENABLE_NETWORK_ISOLATION:-false}
+
+      # === Пути интерпретаторов (опционально) ===
+      MCP_NODEJS_BIN_DIR: ${MCP_NODEJS_BIN_DIR:-}
+      MCP_PYTHON_BIN_DIR: ${MCP_PYTHON_BIN_DIR:-}
+      MCP_DOCKER_BIN_DIR: ${MCP_DOCKER_BIN_DIR:-}
 
     depends_on:
       pluggedin-postgres:
