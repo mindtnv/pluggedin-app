@@ -17,6 +17,8 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
+# Копируем scripts для postinstall
+COPY scripts ./scripts
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
