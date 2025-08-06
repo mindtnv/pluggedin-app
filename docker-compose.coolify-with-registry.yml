@@ -18,7 +18,7 @@ services:
   drizzle-migrate:
     container_name: pluggedin-migrate
     # Используем образ из GitHub Container Registry
-    image: ghcr.io/YOUR_USERNAME/pluggedin-app:migrator-${COMMIT_SHA:-latest}
+    image: ghcr.io/mindtnv/pluggedin-app:migrator-${COMMIT_SHA:-latest}
     restart: "no"
     command: >
       sh -c "

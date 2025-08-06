@@ -30,7 +30,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN }}
+          password: ${{ github.token }}
 
       - name: Extract metadata
         id: meta
@@ -45,8 +45,8 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix={{branch}}-
 
-      # Сборка основного приложения
-      - name: Build and push app image
+      # Сборка всех образов в одном шаге для оптимизации кэша
+      - name: Build and push all images
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -58,7 +58,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
 
-      # Сборка образа для миграций
+      # Сборка образа для миграций (использует кэш от предыдущей сборки)
       - name: Build and push migrator image
         uses: docker/build-push-action@v5
         with:
@@ -66,7 +66,9 @@ jobs:
           file: ./Dockerfile
           target: migrator
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:migrator-${{ github.sha }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:migrator-latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:migrator-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
