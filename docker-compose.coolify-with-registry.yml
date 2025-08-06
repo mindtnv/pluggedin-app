@@ -1,0 +1,149 @@
+services:
+  pluggedin-postgres:
+    container_name: pluggedin-postgres
+    image: postgres:16.2-alpine3.18
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pluggedin}
+      POSTGRES_USER: ${POSTGRES_USER:-pluggedin}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_DB}
+    volumes:
+      - pluggedin-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h pluggedin-postgres -p 5432 -U ${POSTGRES_USER:-pluggedin} -d ${POSTGRES_DB:-pluggedin}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  drizzle-migrate:
+    container_name: pluggedin-migrate
+    # Используем образ из GitHub Container Registry
+    image: ghcr.io/YOUR_USERNAME/pluggedin-app:migrator-${COMMIT_SHA:-latest}
+    restart: "no"
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...';
+        until pg_isready -h pluggedin-postgres -p 5432 -U ${POSTGRES_USER:-pluggedin}; do
+          echo 'Database is unavailable - sleeping';
+          sleep 2;
+        done;
+        echo 'Database is up - running migrations';
+        pnpm drizzle-kit migrate
+      "
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-pluggedin}:${SERVICE_PASSWORD_DB}@pluggedin-postgres:5432/${POSTGRES_DB:-pluggedin}}
+      PGUSER: ${POSTGRES_USER:-pluggedin}
+      PGHOST: pluggedin-postgres
+      PGDATABASE: ${POSTGRES_DB:-pluggedin}
+    depends_on:
+      pluggedin-postgres:
+        condition: service_healthy
+    labels:
+      - "coolify.exclude_from_hc=true"
+
+  pluggedin-app:
+    container_name: pluggedin-app
+    # Используем готовый образ из GitHub Container Registry
+    image: ghcr.io/YOUR_USERNAME/pluggedin-app:${IMAGE_TAG:-latest}
+    restart: always
+    ports:
+      - "3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+
+      # === Домен/URL (генерируются) ===
+      NEXTAUTH_URL: ${SERVICE_URL_APP}
+      NEXT_PUBLIC_APP_URL: ${SERVICE_URL_APP}
+
+      # === Секреты (генерируются) ===
+      NEXTAUTH_SECRET: ${SERVICE_BASE64_64_NEXTAUTH}
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${SERVICE_REALBASE64_64_SERVERACTIONS}
+
+      # === БД ===
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-pluggedin}:${SERVICE_PASSWORD_DB}@pluggedin-postgres:5432/${POSTGRES_DB:-pluggedin}}
+
+      # === Фичи ===
+      ENABLE_RAG: ${ENABLE_RAG:-true}
+      ENABLE_NOTIFICATIONS: ${ENABLE_NOTIFICATIONS:-true}
+      ENABLE_EMAIL_VERIFICATION: ${ENABLE_EMAIL_VERIFICATION:-false}
+
+      # === Почта (редактируемые) ===
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@plugged.in}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Pluggedin}
+      EMAIL_SERVER_HOST: ${EMAIL_SERVER_HOST:-}
+      EMAIL_SERVER_PORT: ${EMAIL_SERVER_PORT:-587}
+      EMAIL_SERVER_USER: ${EMAIL_SERVER_USER:-}
+      EMAIL_SERVER_PASSWORD: ${EMAIL_SERVER_PASSWORD:-}
+
+      # === OAuth (редактируемые) ===
+      GITHUB_ID: ${GITHUB_ID:-}
+      GITHUB_SECRET: ${GITHUB_SECRET:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      TWITTER_CLIENT_ID: ${TWITTER_CLIENT_ID:-}
+      TWITTER_CLIENT_SECRET: ${TWITTER_CLIENT_SECRET:-}
+
+      # === API-ключи моделей (редактируемые) ===
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+
+      # === Админ/безопасность (редактируемые) ===
+      ADMIN_NOTIFICATION_EMAILS: ${ADMIN_NOTIFICATION_EMAILS:-}
+      ADMIN_MIGRATION_SECRET: ${ADMIN_MIGRATION_SECRET:-}
+      NEXT_PUBLIC_ADMIN_USERS: ${NEXT_PUBLIC_ADMIN_USERS:-}
+
+      # === Registry (опционально) ===
+      REGISTRY_API_URL: ${REGISTRY_API_URL:-}
+      REGISTRY_INTERNAL_API_KEY: ${REGISTRY_INTERNAL_API_KEY:-}
+      REGISTRY_AUTH_TOKEN: ${REGISTRY_AUTH_TOKEN:-}
+      NEXT_PUBLIC_PLUGGEDIN_REGISTRY_URL: ${NEXT_PUBLIC_PLUGGEDIN_REGISTRY_URL:-}
+
+      # === Прочее ===
+      RAG_API_URL: ${RAG_API_URL:-}
+      REDIS_URL: ${REDIS_URL:-}
+
+      # === Лимиты/изоляция MCP ===
+      MCP_CPU_CORES_MAX: ${MCP_CPU_CORES_MAX:-0.5}
+      MCP_MEMORY_MAX_MB: ${MCP_MEMORY_MAX_MB:-512}
+      MCP_IO_READ_MBPS: ${MCP_IO_READ_MBPS:-10}
+      MCP_IO_WRITE_MBPS: ${MCP_IO_WRITE_MBPS:-5}
+      MCP_PROCESS_TIMEOUT_MS: ${MCP_PROCESS_TIMEOUT_MS:-300000}
+      MCP_STARTUP_TIMEOUT_MS: ${MCP_STARTUP_TIMEOUT_MS:-10000}
+      MCP_PACKAGE_STORE_DIR: ${MCP_PACKAGE_STORE_DIR:-/var/mcp-packages}
+      MCP_PNPM_STORE_DIR: ${MCP_PNPM_STORE_DIR:-/var/mcp-packages/pnpm-store}
+      MCP_UV_CACHE_DIR: ${MCP_UV_CACHE_DIR:-/var/mcp-packages/uv-cache}
+      MCP_PACKAGE_CACHE_DAYS: ${MCP_PACKAGE_CACHE_DAYS:-30}
+      MCP_PREWARM_COMMON_PACKAGES: ${MCP_PREWARM_COMMON_PACKAGES:-true}
+      MCP_ISOLATION_TYPE: ${MCP_ISOLATION_TYPE:-bubblewrap}
+      MCP_ISOLATION_FALLBACK: ${MCP_ISOLATION_FALLBACK:-firejail}
+      MCP_ENABLE_NETWORK_ISOLATION: ${MCP_ENABLE_NETWORK_ISOLATION:-false}
+
+      # === Пути интерпретаторов ===
+      MCP_NODEJS_BIN_DIR: ${MCP_NODEJS_BIN_DIR:-}
+      MCP_PYTHON_BIN_DIR: ${MCP_PYTHON_BIN_DIR:-}
+      MCP_DOCKER_BIN_DIR: ${MCP_DOCKER_BIN_DIR:-}
+
+    depends_on:
+      pluggedin-postgres:
+        condition: service_healthy
+      drizzle-migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  default:
+    name: pluggedin-network
+
+volumes:
+  pluggedin-postgres:
+    driver: local
